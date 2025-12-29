@@ -1,0 +1,10 @@
+frontend/
+node_modules/
+storage/
+*.log
+.git/
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+
