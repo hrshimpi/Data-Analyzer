@@ -1,24 +1,35 @@
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
+import { Alert, Box, LinearProgress, Paper, Stack, Typography } from '@mui/material'
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined'
 import { uploadFile } from '../api/backend'
 import { useAppState } from '../context/AppContext'
 import type { AppAction } from '../context/reducer'
 import type { ChatThread } from '../types'
+import { normalizeError } from '../utils/errorMessage'
 
-// Helper function to generate unique thread title based on file name
-function generateThreadTitle(fileName: string, dispatch: any): string {
-  const { state } = useAppState()
-  const baseName = fileName.replace(/\.[^/.]+$/, '') // Remove extension
-  const existingTitles = state.chatThreads.map(t => t.title)
-  
+const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls']
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB, mirrors the backend's limit
+
+function validateFileClientSide(file: File): string | null {
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    return `Unsupported file type "${ext || 'unknown'}". Upload a CSV or Excel file (.csv, .xlsx, .xls).`
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1)
+    return `File is ${sizeMb} MB, which exceeds the 10 MB limit.`
+  }
+  return null
+}
+
+function nextThreadTitle(fileName: string, existingTitles: string[]): string {
+  const baseName = fileName.replace(/\.[^/.]+$/, '')
   let title = baseName
   let counter = 1
-  
-  // Check if title exists, if so add counter
   while (existingTitles.includes(title)) {
     title = `${baseName} (${counter})`
     counter++
   }
-  
   return title
 }
 
@@ -26,62 +37,39 @@ export default function FileUpload() {
   const { state, dispatch } = useAppState()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
+  const handleFile = async (file: File) => {
     setError(null)
-    setUploading(true)
 
+    const validationError = validateFileClientSide(file)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setUploading(true)
     try {
       const schema = await uploadFile(file)
-      // Add fileName to schema
       const schemaWithFileName = { ...schema, fileName: file.name }
-      
-      // If there's an active thread, update it with the file
+      const existingTitles = state.chatThreads.map((t) => t.title)
+      const title = nextThreadTitle(file.name, existingTitles)
+
       if (state.activeThreadId) {
-        // Update the active thread with file and schema
-        const baseName = file.name.replace(/\.[^/.]+$/, '') // Remove extension
-        const existingTitles = state.chatThreads.map(t => t.title)
-        
-        let title = baseName
-        let counter = 1
-        
-        // Check if title exists, if so add counter
-        while (existingTitles.includes(title)) {
-          title = `${baseName} (${counter})`
-          counter++
-        }
-        
-        // Update the thread with file info
-        dispatch({ 
-          type: 'UPDATE_THREAD_FILE', 
+        dispatch({
+          type: 'UPDATE_THREAD_FILE',
           payload: {
             threadId: state.activeThreadId,
             fileId: schemaWithFileName.fileId,
             schema: schemaWithFileName,
-            title: title,
-          }
+            title,
+          },
         } as AppAction)
       } else {
-        // Create a new chat thread with file name
-        const baseName = file.name.replace(/\.[^/.]+$/, '') // Remove extension
-        const existingTitles = state.chatThreads.map(t => t.title)
-        
-        let title = baseName
-        let counter = 1
-        
-        // Check if title exists, if so add counter
-        while (existingTitles.includes(title)) {
-          title = `${baseName} (${counter})`
-          counter++
-        }
-        
         const newThread: ChatThread = {
           id: Date.now().toString(),
-          title: title,
+          title,
           messages: [],
           fileId: schemaWithFileName.fileId,
           schema: schemaWithFileName,
@@ -91,31 +79,8 @@ export default function FileUpload() {
         dispatch({ type: 'SET_SCHEMA', payload: schemaWithFileName } as AppAction)
         dispatch({ type: 'CREATE_CHAT_THREAD', payload: newThread } as AppAction)
       }
-    } catch (err: any) {
-      // Enhanced error handling
-      let errorMessage = 'Failed to upload file. Please try again.'
-      
-      if (err.response?.data?.error) {
-        errorMessage = err.response.data.error
-      } else if (err.message) {
-        errorMessage = err.message
-      } else if (err.code === 'ERR_NETWORK') {
-        errorMessage = 'Network error. Please check your connection and try again.'
-      } else if (err.code === 'ECONNABORTED') {
-        errorMessage = 'Upload timeout. The file may be too large or the connection is slow.'
-      }
-
-      // Log error for debugging (only in development)
-      if (import.meta.env.DEV) {
-        console.error('File upload error:', {
-          error: err,
-          message: err.message,
-          status: err.response?.status,
-          requestId: err.requestId || err.response?.data?.requestId,
-        })
-      }
-
-      setError(errorMessage)
+    } catch (err) {
+      setError(normalizeError(err, 'Failed to upload file. Please try again.').message)
     } finally {
       setUploading(false)
       if (fileInputRef.current) {
@@ -124,51 +89,84 @@ export default function FileUpload() {
     }
   }
 
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    const file = event.dataTransfer.files[0]
-    if (file) {
-      const fakeEvent = {
-        target: { files: [file] },
-      } as any
-      handleFileSelect(fakeEvent)
-    }
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) handleFile(file)
   }
 
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = (event: React.DragEvent<HTMLLabelElement>) => {
     event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) handleFile(file)
   }
 
   return (
-    <div className="file-upload">
-      <div
-        className="upload-area"
+    <Box sx={{ width: '100%', maxWidth: 520, mx: 'auto' }}>
+      <Paper
+        variant="outlined"
+        component="label"
         onDrop={handleDrop}
-        onDragOver={handleDragOver}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setIsDragging(true)
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1,
+          textAlign: 'center',
+          px: 4,
+          py: 6,
+          borderRadius: 3,
+          borderStyle: 'dashed',
+          borderWidth: 2,
+          borderColor: isDragging ? 'primary.main' : 'divider',
+          bgcolor: isDragging ? 'action.hover' : 'background.paper',
+          cursor: uploading ? 'default' : 'pointer',
+          transition: 'border-color .15s ease, background-color .15s ease',
+          '&:hover': uploading ? undefined : { borderColor: 'primary.main', bgcolor: 'action.hover' },
+        }}
       >
         <input
           ref={fileInputRef}
+          id="file-input"
           type="file"
           accept=".csv,.xlsx,.xls"
-          onChange={handleFileSelect}
+          onChange={handleInputChange}
           disabled={uploading}
           style={{ display: 'none' }}
-          id="file-input"
         />
-        <label htmlFor="file-input" className="upload-label">
-          {uploading ? (
-            <span>Uploading...</span>
-          ) : (
-            <>
-              <span className="upload-icon">📁</span>
-              <span>Click to upload or drag and drop</span>
-              <span className="upload-hint">CSV or Excel files (max 10MB)</span>
-            </>
-          )}
-        </label>
-      </div>
-      {error && <div className="error-message">{error}</div>}
-    </div>
+
+        {uploading ? (
+          <Stack spacing={1.5} alignItems="center" sx={{ width: '100%', maxWidth: 260 }}>
+            <UploadFileOutlinedIcon color="primary" sx={{ fontSize: 36 }} />
+            <Typography variant="body2" color="text.secondary">
+              Uploading and analyzing your file…
+            </Typography>
+            <LinearProgress sx={{ width: '100%', borderRadius: 1 }} />
+          </Stack>
+        ) : (
+          <>
+            <UploadFileOutlinedIcon sx={{ fontSize: 40, color: 'text.secondary' }} />
+            <Typography variant="body1" fontWeight={600}>
+              Click to upload or drag and drop
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              CSV or Excel files, up to 10 MB
+            </Typography>
+          </>
+        )}
+      </Paper>
+
+      {error && (
+        <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+    </Box>
   )
 }
-

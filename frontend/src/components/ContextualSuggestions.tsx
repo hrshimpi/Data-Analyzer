@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { Box, Chip, Collapse, IconButton, Skeleton, Stack, Tooltip, Typography } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useAppState } from '../context/AppContext'
 import { getContextualSuggestions } from '../api/backend'
+import { normalizeError } from '../utils/errorMessage'
 
 export default function ContextualSuggestions() {
   const { state } = useAppState()
@@ -10,12 +16,12 @@ export default function ContextualSuggestions() {
   const [isHidden, setIsHidden] = useState(false)
 
   useEffect(() => {
-    // Show contextual suggestions if there are chat messages
     if (state.chats.length > 0 && state.fileId) {
       loadContextualSuggestions()
     } else {
       setSuggestions([])
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.chats.length, state.fileId])
 
   const loadContextualSuggestions = async () => {
@@ -23,23 +29,11 @@ export default function ContextualSuggestions() {
 
     setLoading(true)
     try {
-      const contextualSuggestions = await getContextualSuggestions(
-        state.fileId,
-        state.chats.slice(-3) // Last 3 messages for context
-      )
+      const contextualSuggestions = await getContextualSuggestions(state.fileId, state.chats.slice(-3))
       setSuggestions(contextualSuggestions)
-    } catch (err: any) {
-      // Enhanced error handling
-      // @ts-ignore - Vite environment variable
-      if (import.meta.env.DEV) {
-        console.error('Failed to load contextual suggestions:', {
-          error: err,
-          message: err.message,
-          status: err.response?.status,
-          requestId: err.requestId || err.response?.data?.requestId,
-        })
-      }
-      // Silently fail for suggestions - don't show error to user
+    } catch (err) {
+      normalizeError(err, 'Failed to load follow-up suggestions.')
+      // Follow-up suggestions are a nicety, not critical — fail quietly.
       setSuggestions([])
     } finally {
       setLoading(false)
@@ -47,67 +41,69 @@ export default function ContextualSuggestions() {
   }
 
   const handleSuggestionClick = (suggestion: string) => {
-    const event = new CustomEvent('suggestion-selected', { detail: suggestion })
-    window.dispatchEvent(event)
+    window.dispatchEvent(new CustomEvent('suggestion-selected', { detail: suggestion }))
   }
 
-  if (suggestions.length === 0 && !loading) {
-    return null
-  }
+  if (suggestions.length === 0 && !loading) return null
 
   if (isHidden) {
     return (
-      <div className="contextual-suggestions hidden">
-        <button
-          className="show-suggestions-btn"
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+        <Chip
+          size="small"
+          icon={<VisibilityOutlinedIcon fontSize="small" />}
+          label="Show suggestions"
           onClick={() => setIsHidden(false)}
-        >
-          Show Suggestions
-        </button>
-      </div>
+          variant="outlined"
+        />
+      </Box>
     )
   }
 
   const visibleSuggestions = expanded ? suggestions : suggestions.slice(0, 3)
 
   return (
-    <div className="contextual-suggestions">
-      <div className="contextual-suggestions-header">
-        <span className="contextual-suggestions-title">Suggested Questions</span>
-        <div className="suggestions-controls">
+    <Box sx={{ width: '100%' }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+        <Typography variant="caption" color="text.secondary" fontWeight={600} letterSpacing="0.04em">
+          SUGGESTED QUESTIONS
+        </Typography>
+        <Stack direction="row" spacing={0.5}>
           {suggestions.length > 3 && (
-            <button
-              className="expand-suggestions-btn"
-              onClick={() => setExpanded(!expanded)}
-            >
-              {expanded ? 'Show Less' : 'View More'}
-            </button>
+            <IconButton size="small" onClick={() => setExpanded((e) => !e)} aria-label={expanded ? 'Show less' : 'Show more'}>
+              {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+            </IconButton>
           )}
-          <button
-            className="hide-suggestions-btn"
-            onClick={() => setIsHidden(true)}
-            title="Hide suggestions"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
+          <Tooltip title="Hide suggestions">
+            <IconButton size="small" onClick={() => setIsHidden(true)}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </Stack>
+
       {loading ? (
-        <div className="loading">Loading suggestions...</div>
-      ) : (
-        <div className={`contextual-suggestions-list ${expanded ? 'expanded' : ''}`}>
-          {visibleSuggestions.map((suggestion, idx) => (
-            <div
-              key={idx}
-              className="contextual-suggestion-item"
-              onClick={() => handleSuggestionClick(suggestion)}
-            >
-              {suggestion}
-            </div>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} variant="rounded" width={140 + i * 30} height={32} />
           ))}
-        </div>
+        </Stack>
+      )
+      : (
+        <Collapse in>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {visibleSuggestions.map((suggestion, idx) => (
+              <Chip
+                key={idx}
+                label={suggestion}
+                variant="outlined"
+                onClick={() => handleSuggestionClick(suggestion)}
+                sx={{ maxWidth: '100%', height: 'auto', '& .MuiChip-label': { whiteSpace: 'normal', py: 0.75 } }}
+              />
+            ))}
+          </Stack>
+        </Collapse>
       )}
-    </div>
+    </Box>
   )
 }
-

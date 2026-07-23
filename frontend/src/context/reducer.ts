@@ -71,6 +71,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         chats: action.payload.messages,
         fileId: action.payload.fileId || null,
         schema: action.payload.schema || null,
+        suggestions: [],
+        charts: [],
       }
 
     case 'SET_ACTIVE_THREAD':
@@ -81,6 +83,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         chats: activeThread?.messages || [],
         fileId: activeThread?.fileId || null,
         schema: activeThread?.schema || null,
+        suggestions: [],
+        charts: [],
       }
 
     case 'UPDATE_THREAD':
@@ -125,6 +129,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           chatThreads: threadsWithFile,
           fileId: action.payload.fileId,
           schema: action.payload.schema,
+          suggestions: [],
+          charts: [],
         }
       }
       return {
@@ -161,6 +167,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         chats: newActiveThread?.messages || [],
         fileId: newActiveThread?.fileId || null,
         schema: newActiveThread?.schema || null,
+        suggestions: [],
+        charts: [],
       }
 
     case 'RESET_APP':

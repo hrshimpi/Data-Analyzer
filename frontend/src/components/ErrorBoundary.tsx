@@ -1,4 +1,7 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react'
+import { Component, ErrorInfo, ReactNode } from 'react'
+import { Alert, Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
+import RefreshIcon from '@mui/icons-material/Refresh'
+import ReplayIcon from '@mui/icons-material/Replay'
 
 interface Props {
   children: ReactNode
@@ -30,26 +33,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log error to console in development
     if (import.meta.env.DEV) {
       console.error('ErrorBoundary caught an error:', error, errorInfo)
     }
-
-    // In production, you could log to an error reporting service
-    // Example: logErrorToService(error, errorInfo)
-
-    this.setState({
-      error,
-      errorInfo,
-    })
+    this.setState({ error, errorInfo })
   }
 
   handleReset = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    })
+    this.setState({ hasError: false, error: null, errorInfo: null })
   }
 
   render() {
@@ -59,33 +50,38 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="error-boundary">
-          <div className="error-boundary-content">
-            <h2>Something went wrong</h2>
-            <p>We're sorry, but something unexpected happened. Please try refreshing the page.</p>
-            {import.meta.env.DEV && this.state.error && (
-              <details className="error-details">
-                <summary>Error Details (Development Only)</summary>
-                <pre>{this.state.error.toString()}</pre>
-                {this.state.errorInfo && (
-                  <pre>{this.state.errorInfo.componentStack}</pre>
-                )}
-              </details>
-            )}
-            <div className="error-actions">
-              <button onClick={this.handleReset} className="retry-button">
-                Try Again
-              </button>
-              <button onClick={() => window.location.reload()} className="reload-button">
-                Reload Page
-              </button>
-            </div>
-          </div>
-        </div>
+        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', bgcolor: 'background.default' }}>
+          <Container maxWidth="sm">
+            <Paper variant="outlined" sx={{ p: 4, borderRadius: 3 }}>
+              <Typography variant="h5" fontWeight={700} gutterBottom>
+                Something went wrong
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                An unexpected error occurred while rendering the app. You can try again, or reload the page if the
+                problem persists.
+              </Typography>
+
+              {import.meta.env.DEV && this.state.error && (
+                <Alert severity="error" variant="outlined" sx={{ mb: 3, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 12 }}>
+                  {this.state.error.toString()}
+                  {this.state.errorInfo?.componentStack}
+                </Alert>
+              )}
+
+              <Stack direction="row" spacing={1.5}>
+                <Button variant="contained" startIcon={<ReplayIcon />} onClick={this.handleReset}>
+                  Try again
+                </Button>
+                <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => window.location.reload()}>
+                  Reload page
+                </Button>
+              </Stack>
+            </Paper>
+          </Container>
+        </Box>
       )
     }
 
     return this.props.children
   }
 }
-

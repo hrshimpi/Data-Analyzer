@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosResponse } from 'axios'
 import type { DatasetSchema, SuggestionsResponse, AnalyzeResponse } from '../types'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -113,10 +113,13 @@ export const analyze = async (
   fileId: string,
   prompt: string
 ): Promise<AnalyzeResponse> => {
-  const response = await api.post<AnalyzeResponse>('/analyze', {
-    fileId,
-    prompt,
-  })
+  // /analyze can chain up to 4 sequential Gemini calls (insights + up to 3
+  // chart-generation retries), which can exceed the default 60s timeout.
+  const response = await api.post<AnalyzeResponse>(
+    '/analyze',
+    { fileId, prompt },
+    { timeout: 150000 }
+  )
 
   return response.data
 }

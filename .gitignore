@@ -3,6 +3,13 @@
 .env.local
 .env.*.local
 
+# Legacy Go backends (superseded by backend-python/) — kept locally for reference only
+backend/
+gobackend/
+main.go
+go.mod
+go.sum
+
 # Go
 *.exe
 *.exe~
