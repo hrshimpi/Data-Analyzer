@@ -49,12 +49,28 @@ export interface ChatMessage {
   timestamp: number
 }
 
+export interface DashboardLayout {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface PinnedChart {
+  id: string
+  chart: ChartConfig
+  sourcePrompt?: string
+  pinnedAt: number
+  layout: DashboardLayout
+}
+
 export interface ChatThread {
   id: string
   title: string
   messages: ChatMessage[]
   fileId?: string | null
   schema?: DatasetSchema | null
+  pinnedCharts?: PinnedChart[]
   createdAt: number
   updatedAt: number
 }

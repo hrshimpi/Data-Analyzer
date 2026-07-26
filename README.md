@@ -25,8 +25,9 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 - 🤖 AI-powered data analysis suggestions
 - 💬 Natural language Q&A about your data
 - 📈 Interactive charts (bar, line, scatter, pie, area, combo, histogram, boxplot, bubble, correlation)
+- 📌 **Pinnable dashboard canvas** — pin any generated chart out of the chat onto a persistent, drag-and-resize grid (built on `react-grid-layout`), so you can assemble your own dashboard instead of scrolling back through the conversation
 - 🌓 Light/dark theme
-- 💾 Local browser persistence — multiple chat threads, switchable from the sidebar
+- 💾 Local browser persistence — multiple chat threads and pinned dashboards, switchable from the sidebar
 
 ---
 
@@ -49,7 +50,7 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 
 **Backend** — layered FastAPI app: `handlers/` (HTTP routes) → `services/` (Gemini integration, chart generation/orchestration, in-memory file storage) → `models/` (Pydantic schemas + dataset parsing) → `middleware/` + `utils/` (logging, request IDs, structured errors). All Gemini calls are fully async so concurrent requests don't block one another. See [`backend-python/README.md`](backend-python/README.md) for the full module-by-module breakdown and API reference.
 
-**Frontend** — React 18 + TypeScript, Material UI v5 for the component/design system, Recharts for chart rendering, `react-router-dom` for routing, `axios` for API calls. State lives in a single reducer-based context (`AppContext`/`reducer.ts`) with chat threads persisted to `localStorage`.
+**Frontend** — React 18 + TypeScript, Material UI v5 for the component/design system, Recharts for chart rendering, `react-grid-layout` for the pinnable dashboard canvas, `react-router-dom` for routing, `axios` for API calls. State lives in a single reducer-based context (`AppContext`/`reducer.ts`) with chat threads (including pinned dashboards) persisted to `localStorage`.
 
 ---
 
@@ -60,6 +61,7 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 | Frontend framework | React 18 + TypeScript + Vite |
 | UI / design system | Material UI (MUI) v5, `@emotion` |
 | Charts | Recharts |
+| Dashboard layout | `react-grid-layout` (drag/resize grid) |
 | Backend framework | FastAPI (Python 3.11) + Uvicorn |
 | Data processing | pandas, numpy |
 | AI / LLM | Google Vertex AI — Gemini (async `httpx` + `google-auth`) |
@@ -82,7 +84,7 @@ Agenetic Data Analyzer/
 └── frontend/                # React + MUI frontend
     └── src/
         ├── components/        # AppSidebar, AppShell, ChatScreen, FileUpload, PromptInput,
-        │                       # ChatHistory, ChartRenderer, Suggestions, ContextualSuggestions, ...
+        │                       # ChatHistory, ChartRenderer, DashboardCanvas, Suggestions, ...
         ├── pages/               # Landing, Home, Dashboard
         ├── context/              # AppContext + reducer (app state), ColorModeContext (theme)
         ├── api/                    # backend.ts — typed axios client
@@ -174,26 +176,6 @@ Full backend details (Docker, data flow, module-by-module breakdown) are in [`ba
 Interactive Swagger docs are available at `http://localhost:3001/docs` while the backend is running.
 
 ---
-
-## Troubleshooting
-
-**"No project ID could be determined" warning** — harmless; the app builds the Vertex AI endpoint from `GOOGLE_CLOUD_PROJECT_ID` directly, not from credential auto-detection. Silence it with `gcloud config set project YOUR_PROJECT_ID` if it bothers you.
-
-**404 from the Gemini endpoint** — the configured `GEMINI_MODEL` isn't a valid published model ID for your project/region. Check available models in the Vertex AI Studio console, or leave `GEMINI_MODEL` unset to use the default.
-
-**CORS errors** — make sure the frontend's actual origin (check the exact port Vite prints on startup) is listed in `CORS_ALLOWED_ORIGINS`.
-
-**"Dataset not found" after a while** — the backend stores uploaded files in memory; restarting the server clears them. Re-upload the file.
-
----
-
-## Known limitations
-
-- **In-memory storage** — uploaded datasets live in the backend process's memory and are lost on restart; not suitable for multi-instance deployment as-is.
-- **No authentication** — all endpoints are open; anyone with a `fileId` can query that dataset.
-- **Single-user oriented** — chat history is stored in browser `localStorage`, not synced across devices or accounts.
-
-These are known, tracked constraints for the current stage of the project rather than oversights.
 
 ## License
 

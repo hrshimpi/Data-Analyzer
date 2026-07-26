@@ -1,8 +1,10 @@
-import { Alert, Avatar, Box, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Avatar, Box, Paper, Snackbar, Stack, Typography } from '@mui/material'
+import { useState } from 'react'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { useAppState } from '../context/AppContext'
 import ChartRenderer from './ChartRenderer'
-import type { ChatMessage } from '../types'
+import type { AppAction } from '../context/reducer'
+import type { ChartConfig, ChatMessage } from '../types'
 
 const CHART_STATUS_SEVERITY: Record<string, 'warning' | 'error' | 'info'> = {
   partial: 'warning',
@@ -28,8 +30,12 @@ export default function ChatHistory() {
 
   return (
     <Stack spacing={3} sx={{ width: '100%' }}>
-      {messages.map((message) => (
-        <MessageRow key={message.id} message={message} />
+      {messages.map((message, idx) => (
+        <MessageRow
+          key={message.id}
+          message={message}
+          precedingPrompt={messages[idx - 1]?.role === 'user' ? messages[idx - 1].content : undefined}
+        />
       ))}
     </Stack>
   )
@@ -57,9 +63,20 @@ function MessageContentLines({ content }: { content: string }) {
   )
 }
 
-function MessageRow({ message }: { message: ChatMessage }) {
+function MessageRow({ message, precedingPrompt }: { message: ChatMessage; precedingPrompt?: string }) {
+  const { state, dispatch } = useAppState()
+  const [pinnedNotice, setPinnedNotice] = useState(false)
   const isUser = message.role === 'user'
   const time = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+  const handlePin = (chart: ChartConfig) => {
+    if (!state.activeThreadId) return
+    dispatch({
+      type: 'PIN_CHART',
+      payload: { threadId: state.activeThreadId, chart, sourcePrompt: precedingPrompt },
+    } as AppAction)
+    setPinnedNotice(true)
+  }
 
   if (isUser) {
     // User messages never carry charts, so a right-aligned, content-width
@@ -110,7 +127,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
 
         {message.charts && message.charts.length > 0 && (
           <Box sx={{ mt: 1.5, width: '100%', minWidth: 0 }}>
-            <ChartRenderer charts={message.charts} />
+            <ChartRenderer charts={message.charts} onPin={handlePin} />
           </Box>
         )}
 
@@ -120,6 +137,14 @@ function MessageRow({ message }: { message: ChatMessage }) {
           </Alert>
         )}
       </Box>
+
+      <Snackbar
+        open={pinnedNotice}
+        autoHideDuration={2500}
+        onClose={() => setPinnedNotice(false)}
+        message="Pinned to dashboard"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   )
 }
