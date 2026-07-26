@@ -22,10 +22,13 @@ import {
 import { Box, Card, Stack, IconButton, Tooltip as MuiTooltip, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined'
+import CloseIcon from '@mui/icons-material/Close'
 import type { ChartConfig } from '../types'
 
 interface ChartRendererProps {
   charts: ChartConfig[]
+  onPin?: (chart: ChartConfig) => void
 }
 
 const COLORS = [
@@ -33,7 +36,7 @@ const COLORS = [
   '#E888C0', '#B8D65E', '#63A6E0', '#E0956B',
 ]
 
-export default function ChartRenderer({ charts }: ChartRendererProps) {
+export default function ChartRenderer({ charts, onPin }: ChartRendererProps) {
   if (charts.length === 0) {
     return null
   }
@@ -48,13 +51,23 @@ export default function ChartRenderer({ charts }: ChartRendererProps) {
       }}
     >
       {charts.map((chart, idx) => (
-        <ChartContainer key={idx} chart={chart} index={idx} />
+        <ChartCard key={idx} chart={chart} index={idx} onPin={onPin ? () => onPin(chart) : undefined} />
       ))}
     </Box>
   )
 }
 
-function ChartContainer({ chart, index }: { chart: ChartConfig; index: number }) {
+interface ChartCardProps {
+  chart: ChartConfig
+  index: number
+  onPin?: () => void
+  onRemove?: () => void
+  /** When true, the header acts as the drag handle for react-grid-layout. */
+  dragHandle?: boolean
+  fillHeight?: boolean
+}
+
+export function ChartCard({ chart, index, onPin, onRemove, dragHandle, fillHeight }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null)
 
   const handleExport = async (format: 'png' | 'svg') => {
@@ -152,15 +165,37 @@ function ChartContainer({ chart, index }: { chart: ChartConfig; index: number })
     <Card
       ref={chartRef}
       variant="outlined"
-      sx={{ p: 2, width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}
+      sx={{
+        p: 2,
+        width: '100%',
+        height: fillHeight ? '100%' : undefined,
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.5,
+      }}
     >
-      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        gap={1}
+        className={dragHandle ? 'chart-card-drag-handle' : undefined}
+        sx={dragHandle ? { cursor: 'grab', userSelect: 'none' } : undefined}
+      >
         {chart.title && (
           <Typography variant="subtitle2" fontWeight={600} noWrap title={chart.title}>
             {chart.title}
           </Typography>
         )}
-        <Stack direction="row" spacing={0.5}>
+        <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+          {onPin && (
+            <MuiTooltip title="Pin to dashboard">
+              <IconButton size="small" onClick={onPin} aria-label="Pin chart to dashboard">
+                <PushPinOutlinedIcon fontSize="small" />
+              </IconButton>
+            </MuiTooltip>
+          )}
           <MuiTooltip title="Export as PNG">
             <IconButton size="small" onClick={() => handleExport('png')} aria-label="Export chart as PNG">
               <ImageOutlinedIcon fontSize="small" />
@@ -173,13 +208,20 @@ function ChartContainer({ chart, index }: { chart: ChartConfig; index: number })
               </IconButton>
             </MuiTooltip>
           )}
+          {onRemove && (
+            <MuiTooltip title="Remove from dashboard">
+              <IconButton size="small" onClick={onRemove} aria-label="Remove chart from dashboard">
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </MuiTooltip>
+          )}
         </Stack>
       </Stack>
-      <Box className="chart-content" sx={{ width: '100%', minWidth: 0 }}>
+      <Box className="chart-content" sx={{ width: '100%', minWidth: 0, flex: fillHeight ? 1 : undefined }}>
         {chart.type === 'boxplot' || chart.type === 'correlation' ? (
           renderChart(chart)
         ) : (
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={fillHeight ? '100%' : 320}>
             {renderChart(chart) as any}
           </ResponsiveContainer>
         )}

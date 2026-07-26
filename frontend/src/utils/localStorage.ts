@@ -7,13 +7,12 @@ const CHAT_EXPIRY_HOURS = 24 // Chat data expires after 24 hours
 
 export const saveState = (state: AppState): void => {
   try {
-    // Only save non-file data
-    const stateToSave = {
-      ...state,
-      fileId: null, // Don't persist fileId
-      schema: null, // Don't persist schema (file data)
-    }
-    const serialized = JSON.stringify(stateToSave)
+    // Persisted as-is, including fileId/schema, so a page reload resumes the
+    // active session. If the backend has since restarted (in-memory storage
+    // cleared), the next request against a stale fileId surfaces a clear
+    // "dataset not found, please re-upload" error rather than silently
+    // losing the whole session on every refresh.
+    const serialized = JSON.stringify(state)
     localStorage.setItem(STORAGE_KEY, serialized)
     
     // Save chat threads separately with expiry

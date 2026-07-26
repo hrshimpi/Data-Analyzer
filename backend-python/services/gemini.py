@@ -128,7 +128,7 @@ async def get_suggestions(columns: list[ColumnInfo], summary: dict[str, Any]) ->
 Dataset statistics:
 {summary_text}
 
-Generate 5-6 specific, business-relevant analysis questions or suggestions that would provide meaningful insights from this data.
+Generate 2-3 specific, business-relevant analysis questions or suggestions that would provide meaningful insights from this data.
 Focus on patterns, trends, correlations, and outliers.
 
 Return ONLY a JSON array of strings, no other text:
@@ -153,7 +153,7 @@ async def get_contextual_suggestions(
 Recent conversation:
 {chat_text}
 
-Based on what has already been discussed, generate 4-6 follow-up questions that would deepen the analysis or explore new angles. Avoid repeating what was already asked.
+Based on what has already been discussed, generate 2-3 follow-up questions that would deepen the analysis or explore new angles. Avoid repeating what was already asked.
 
 Return ONLY a JSON array of strings:
 ["question 1", "question 2", ...]"""

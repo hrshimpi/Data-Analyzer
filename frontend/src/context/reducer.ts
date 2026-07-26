@@ -1,4 +1,4 @@
-import type { AppState, DatasetSchema, ChatMessage, ChartConfig, ChatThread } from '../types'
+import type { AppState, DatasetSchema, ChatMessage, ChartConfig, ChatThread, PinnedChart, DashboardLayout } from '../types'
 
 export type AppAction =
   | { type: 'SET_SCHEMA'; payload: DatasetSchema }
@@ -13,6 +13,9 @@ export type AppAction =
   | { type: 'UPDATE_THREAD_FILE'; payload: { threadId: string; fileId: string; schema: DatasetSchema; title?: string } }
   | { type: 'UPDATE_THREAD_TITLE'; payload: { threadId: string; title: string } }
   | { type: 'DELETE_THREAD'; payload: string }
+  | { type: 'PIN_CHART'; payload: { threadId: string; chart: ChartConfig; sourcePrompt?: string } }
+  | { type: 'UNPIN_CHART'; payload: { threadId: string; chartId: string } }
+  | { type: 'UPDATE_DASHBOARD_LAYOUT'; payload: { threadId: string; layouts: Array<{ id: string } & DashboardLayout> } }
 
 export const initialState: AppState = {
   fileId: null,
@@ -170,6 +173,51 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         suggestions: [],
         charts: [],
       }
+
+    case 'PIN_CHART': {
+      const existingCount = state.chatThreads.find((t) => t.id === action.payload.threadId)?.pinnedCharts?.length ?? 0
+      const newPin: PinnedChart = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        chart: action.payload.chart,
+        sourcePrompt: action.payload.sourcePrompt,
+        pinnedAt: Date.now(),
+        // Alternate left/right so pins tile two-per-row by default; y:
+        // Infinity tells react-grid-layout to place it below existing tiles
+        // in that column instead of overlapping them.
+        layout: { x: existingCount % 2 === 0 ? 0 : 6, y: Infinity, w: 6, h: 8 },
+      }
+      const threadsWithPin = state.chatThreads.map((thread) => {
+        if (thread.id !== action.payload.threadId) return thread
+        return { ...thread, pinnedCharts: [...(thread.pinnedCharts ?? []), newPin] }
+      })
+      return { ...state, chatThreads: threadsWithPin }
+    }
+
+    case 'UNPIN_CHART': {
+      const threadsWithoutPin = state.chatThreads.map((thread) => {
+        if (thread.id !== action.payload.threadId) return thread
+        return {
+          ...thread,
+          pinnedCharts: (thread.pinnedCharts ?? []).filter((p) => p.id !== action.payload.chartId),
+        }
+      })
+      return { ...state, chatThreads: threadsWithoutPin }
+    }
+
+    case 'UPDATE_DASHBOARD_LAYOUT': {
+      const threadsWithLayout = state.chatThreads.map((thread) => {
+        if (thread.id !== action.payload.threadId) return thread
+        const layoutById = new Map(action.payload.layouts.map((l) => [l.id, l]))
+        return {
+          ...thread,
+          pinnedCharts: (thread.pinnedCharts ?? []).map((p) => {
+            const updated = layoutById.get(p.id)
+            return updated ? { ...p, layout: { x: updated.x, y: updated.y, w: updated.w, h: updated.h } } : p
+          }),
+        }
+      })
+      return { ...state, chatThreads: threadsWithLayout }
+    }
 
     case 'RESET_APP':
       return initialState
