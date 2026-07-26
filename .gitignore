@@ -6,6 +6,9 @@
 # Private dev notes — troubleshooting/limitations/setup gotchas, not for GitHub
 DEV_NOTES.md
 
+# Local docker-compose overrides (e.g. auto bucket creation) — personal, not committed
+docker-compose.override.yml
+
 # Legacy Go backends (superseded by backend-python/) — kept locally for reference only
 backend/
 gobackend/

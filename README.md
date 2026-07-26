@@ -140,6 +140,27 @@ Open `http://localhost:5173` in your browser.
 
 Full backend details (Docker, data flow, module-by-module breakdown) are in [`backend-python/README.md`](backend-python/README.md).
 
+### 3. Local infrastructure (Postgres + MinIO)
+
+Not required for the core upload/analyze flow yet — this brings up Postgres (with the `pgvector` extension, for upcoming RAG work) and a local S3-compatible store (MinIO), so the app talks to the same kind of endpoints locally as it will in the cloud, just pointed at `localhost` instead of AWS.
+
+```bash
+docker compose up -d
+```
+
+This starts:
+- **Postgres** (`pgvector/pgvector:pg16`) on `localhost:5432` — connect with `psql`, TablePlus, DBeaver, or any Postgres GUI client using the credentials in `docker-compose.yml` / `backend-python/.env.example` (`DATABASE_URL`).
+- **MinIO** (S3-compatible object storage) — API on `localhost:9000`, web console on [`localhost:9001`](http://localhost:9001) (log in with the `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` values, defaults in `docker-compose.yml`).
+
+To auto-create the local bucket (`orion-datasets-local`) on startup:
+
+```bash
+cp docker-compose.override.yml.example docker-compose.override.yml
+docker compose up -d
+```
+
+Stop everything with `docker compose down` (add `-v` to also wipe the persisted volumes).
+
 ---
 
 ## Environment variables
