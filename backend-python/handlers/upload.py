@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models.api import UploadResponse
 from models.dataset import parse_file
-from models.db import Dataset as DatasetRecord
+from models.db import Dataset as DatasetRecord, User
 from services import storage_service
-from services.user_service import get_or_create_default_user
+from services.auth_service import get_current_user
 from utils.errors import ValidationError
 from utils.response import error, success
 from utils.validation import validate_upload
@@ -22,7 +22,10 @@ router = APIRouter()
 
 @router.post("/upload")
 async def upload_file(
-    request: Request, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> JSONResponse:
     req_id = getattr(request.state, "request_id", None)
     try:
@@ -37,10 +40,9 @@ async def upload_file(
         # stashed in a process-wide dict).
         parsed = parse_file(filename, content)
 
-        user = await get_or_create_default_user(db)
         dataset_id = uuid.uuid4()
 
-        s3_key = await storage_service.upload_file(str(user.id), str(dataset_id), filename, content)
+        s3_key = await storage_service.upload_file(str(current_user.id), str(dataset_id), filename, content)
 
         column_schema = {
             "columns": [c.model_dump(by_alias=True) for c in parsed.columns],
@@ -48,7 +50,7 @@ async def upload_file(
         }
         record = DatasetRecord(
             id=dataset_id,
-            user_id=user.id,
+            user_id=current_user.id,
             filename=filename,
             s3_bucket=storage_service.bucket_name(),
             s3_key=s3_key,

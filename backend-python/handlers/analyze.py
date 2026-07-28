@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models.api import AnalyzeRequest
+from models.db import User
 from services import analysis_engine, dataset_service
+from services.auth_service import get_current_user
 from utils.response import error, success
 from utils.validation import validate_prompt
 
@@ -16,14 +18,19 @@ router = APIRouter()
 
 
 @router.post("/analyze")
-async def analyze(request: Request, body: AnalyzeRequest, db: AsyncSession = Depends(get_db)) -> JSONResponse:
+async def analyze(
+    request: Request,
+    body: AnalyzeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JSONResponse:
     req_id = getattr(request.state, "request_id", None)
     try:
         prompt_err = validate_prompt(body.prompt)
         if prompt_err:
             return error(prompt_err, "VALIDATION_ERROR", req_id, 400)
 
-        record = await dataset_service.get_dataset_record(db, body.file_id)
+        record = await dataset_service.get_dataset_record(db, body.file_id, current_user.id)
         if record is None:
             return error("Dataset not found. Please re-upload your file.", "NOT_FOUND", req_id, 404)
 
