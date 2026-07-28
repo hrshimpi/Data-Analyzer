@@ -142,14 +142,14 @@ Full backend details (Docker, data flow, module-by-module breakdown) are in [`ba
 
 ### 3. Local infrastructure (Postgres + MinIO)
 
-Not required for the core upload/analyze flow yet — this brings up Postgres (with the `pgvector` extension, for upcoming RAG work) and a local S3-compatible store (MinIO), so the app talks to the same kind of endpoints locally as it will in the cloud, just pointed at `localhost` instead of AWS.
+Not required for the core upload/analyze flow yet — this brings up Postgres (with the `pgvector` extension, for RAG work) and a local S3-compatible store (MinIO), so the app talks to the same kind of endpoints locally as it will in the cloud, just pointed at `localhost` instead of AWS.
 
 ```bash
 docker compose up -d
 ```
 
 This starts:
-- **Postgres** (`pgvector/pgvector:pg16`) on `localhost:5432` — connect with `psql`, TablePlus, DBeaver, or any Postgres GUI client using the credentials in `docker-compose.yml` / `backend-python/.env.example` (`DATABASE_URL`).
+- **Postgres** (`pgvector/pgvector:pg16`) on `localhost:5433` (not the Postgres default 5432 — deliberately avoids clashing with a native Postgres install you may already have running) — connect with `psql`, TablePlus, DBeaver, or any Postgres GUI client using the credentials in `docker-compose.yml` / `backend-python/.env.example` (`DATABASE_URL`).
 - **MinIO** (S3-compatible object storage) — API on `localhost:9000`, web console on [`localhost:9001`](http://localhost:9001) (log in with the `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` values, defaults in `docker-compose.yml`).
 
 To auto-create the local bucket (`orion-datasets-local`) on startup:
@@ -160,6 +160,27 @@ docker compose up -d
 ```
 
 Stop everything with `docker compose down` (add `-v` to also wipe the persisted volumes).
+
+### 4. Database schema (SQLAlchemy + Alembic)
+
+With Postgres running (previous step), apply the schema:
+
+```bash
+cd backend-python
+venv\Scripts\activate                          # Windows
+alembic upgrade head                            # applies all migrations
+```
+
+Other common commands, run from `backend-python/`:
+
+```bash
+alembic revision --autogenerate -m "describe your change"   # generate a new migration after editing models/db/*.py
+alembic upgrade head                                          # apply all pending migrations
+alembic downgrade -1                                           # revert the most recent migration
+alembic current                                                 # show the currently-applied revision
+```
+
+The schema lives in `models/db/` (`User`, `Dataset`, `ChatThread`, `Message`) — `Base.metadata` from there is what `alembic revision --autogenerate` diffs against.
 
 ---
 

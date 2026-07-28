@@ -8,7 +8,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orion_local_password}
       POSTGRES_DB: ${POSTGRES_DB:-orion_data_analyzer}
     ports:
-      - "5432:5432"
+      # Host side is 5433, not the Postgres default 5432 — many dev
+      # machines already have a native Postgres install bound to 5432,
+      # which silently intercepts connections meant for this container
+      # (same symptom either way: password auth fails, because you're
+      # not even talking to this container). 5433 avoids that clash.
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
