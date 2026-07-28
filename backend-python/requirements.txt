@@ -14,3 +14,4 @@ sqlalchemy==2.0.36
 asyncpg==0.30.0
 alembic==1.14.0
 aioboto3==15.5.0
+pyjwt[crypto]==2.13.0

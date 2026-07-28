@@ -69,6 +69,7 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 | Database | Postgres (+ `pgvector`) via SQLAlchemy 2.0 (async, `asyncpg`) + Alembic |
 | Object storage | S3-compatible (MinIO locally, AWS S3 in the cloud) via `aioboto3` |
 | AI / LLM | Google Vertex AI — Gemini (async `httpx` + `google-auth`) |
+| Auth | AWS Cognito — JWT verification via `PyJWT` against cached JWKS |
 | Validation | Pydantic v2 |
 
 ---
@@ -163,12 +164,14 @@ venv\Scripts\activate        # Windows — skip if already active from step 2
 
 copy .env.example .env      # Windows
 # cp .env.example .env      # macOS/Linux
-# then edit .env — set GOOGLE_CLOUD_PROJECT_ID (Postgres/S3 vars already default to the local infra above)
+# then edit .env — set GOOGLE_CLOUD_PROJECT_ID (Postgres/S3/auth vars already default to local dev)
 
 gcloud auth application-default login
 
 python main.py               # listens on http://localhost:3001
 ```
+
+Every endpoint except `/health` requires a Bearer token. `.env.example` defaults to `AUTH_MODE=local`, which accepts a single hardcoded dev token instead of real Cognito — see [Authentication](#authentication) below before deploying this anywhere shared.
 
 ### 4. Frontend
 
@@ -188,6 +191,25 @@ Full backend details (Docker, data flow, module-by-module breakdown) are in [`ba
 
 ---
 
+## Authentication
+
+Every endpoint except `GET /health` requires `Authorization: Bearer <token>`. Tokens are validated two different ways depending on `AUTH_MODE`:
+
+**`AUTH_MODE=cognito`** (the real path) — the token must be a valid AWS Cognito **access** token (not an ID token) for the configured User Pool and App Client: signature verified against Cognito's public JWKS (fetched once, cached for an hour), plus `token_use`, `client_id`, and `iss` all checked explicitly. On first use, the token's `sub` claim is looked up in the `users` table and a row is created automatically if it doesn't exist yet — no separate signup step.
+
+Setup:
+1. In the AWS Console, create a Cognito **User Pool** and an **App Client** (public client, no secret — this is a browser app).
+2. Set `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID`, `COGNITO_REGION` in `backend-python/.env`.
+3. Set `AUTH_MODE=cognito`.
+
+**`AUTH_MODE=local`** (the default in `.env.example`) — for local development without a Cognito pool. Accepts one hardcoded token (`local-dev-token`) and maps every request to a single fixed test user, instead of verifying anything real.
+
+> **Never set `AUTH_MODE=local` outside your own machine.** There is no real authentication in this mode — the token is a public, checked-into-this-repo string. Do not set it in any deployed or shared environment.
+
+The frontend sends this same hardcoded token on every request (`VITE_DEV_AUTH_TOKEN` in `frontend/.env.local`) as a stand-in until a real login flow exists — it only works against a backend running with `AUTH_MODE=local`.
+
+---
+
 ## Environment variables
 
 **`backend-python/.env`**
@@ -200,12 +222,19 @@ Full backend details (Docker, data flow, module-by-module breakdown) are in [`ba
 | `GOOGLE_APPLICATION_CREDENTIALS` | No | — | Path to a service-account key; not needed with `gcloud auth application-default login` |
 | `CORS_ALLOWED_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed origins |
 | `PORT` | No | `3001` | Server port |
+| `DATABASE_URL` | Yes | — | Postgres connection string (see [Local infrastructure](#1-local-infrastructure-postgres--minio)) |
+| `S3_ENDPOINT_URL` | No | — | `http://localhost:9000` locally (MinIO); unset for real AWS |
+| `S3_BUCKET_NAME` | Yes | — | `orion-datasets-local` locally |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | No | — | MinIO root user/password locally; omit in the cloud to use an IAM role instead |
+| `AUTH_MODE` | No | `cognito` (code default) | `cognito` or `local` — see [Authentication](#authentication) |
+| `COGNITO_USER_POOL_ID` / `COGNITO_APP_CLIENT_ID` / `COGNITO_REGION` | Required when `AUTH_MODE=cognito` | — | From your Cognito User Pool + App Client |
 
 **`frontend/.env.local`**
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `VITE_API_URL` | No | `http://localhost:3001` | Backend base URL |
+| `VITE_DEV_AUTH_TOKEN` | No | — | Sent as the Bearer token on every request; only works against a backend running `AUTH_MODE=local` |
 
 ---
 

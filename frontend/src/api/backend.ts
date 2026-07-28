@@ -3,10 +3,16 @@ import type { DatasetSchema, SuggestionsResponse, AnalyzeResponse } from '../typ
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
+// TEMPORARY until a real login flow exists: a static token, only valid
+// against a backend running with AUTH_MODE=local. Never points at a real
+// Cognito-protected backend — see backend-python/.env.example.
+const DEV_AUTH_TOKEN = import.meta.env.VITE_DEV_AUTH_TOKEN
+
 const api = axios.create({
   baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
+    ...(DEV_AUTH_TOKEN ? { Authorization: `Bearer ${DEV_AUTH_TOKEN}` } : {}),
   },
   timeout: 60000, // 60 seconds timeout
 })

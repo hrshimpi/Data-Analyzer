@@ -11,14 +11,21 @@ from models.db import Dataset as DatasetRecord
 from services import storage_service
 
 
-async def get_dataset_record(db: AsyncSession, dataset_id: str) -> Optional[DatasetRecord]:
-    """Look up a dataset's metadata row by ID. A malformed ID and a
-    missing row are both just "not found" to callers — both return None."""
+async def get_dataset_record(db: AsyncSession, dataset_id: str, user_id) -> Optional[DatasetRecord]:
+    """Look up a dataset's metadata row by ID, scoped to its owner.
+
+    A malformed ID, a missing row, and a row that belongs to a *different*
+    user are all just "not found" to callers — same response for all
+    three, so a valid token for someone else's account can't be used to
+    even confirm another user's dataset ID exists.
+    """
     try:
         dataset_uuid = uuid.UUID(dataset_id)
     except ValueError:
         return None
-    result = await db.execute(select(DatasetRecord).where(DatasetRecord.id == dataset_uuid))
+    result = await db.execute(
+        select(DatasetRecord).where(DatasetRecord.id == dataset_uuid, DatasetRecord.user_id == user_id)
+    )
     return result.scalar_one_or_none()
 
 
