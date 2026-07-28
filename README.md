@@ -37,18 +37,20 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 ┌─────────────────────────┐        HTTP/JSON        ┌──────────────────────────┐
 │   React + MUI Frontend  │ ───────────────────────▶ │   FastAPI Backend        │
 │   (Vite, port 5173)     │ ◀─────────────────────── │   (Uvicorn, port 3001)   │
-└─────────────────────────┘                          └────────────┬─────────────┘
-                                                                   │
-                                                        async httpx + OAuth2
-                                                                   │
-                                                                   ▼
-                                                     ┌──────────────────────────┐
-                                                     │  Google Vertex AI        │
-                                                     │  (Gemini 2.5 Flash)      │
-                                                     └──────────────────────────┘
+└─────────────────────────┘                          └───┬──────────┬──────────┬┘
+                                                           │          │          │
+                                              async httpx  │  asyncpg │  aioboto3│
+                                                + OAuth2    │          │          │
+                                                           ▼          ▼          ▼
+                                          ┌──────────────────┐ ┌───────────┐ ┌───────────────┐
+                                          │ Google Vertex AI │ │ Postgres  │ │ S3 / MinIO     │
+                                          │ (Gemini 2.5      │ │ (+pgvector)│ │ (raw files)    │
+                                          │  Flash)          │ │ dataset    │ │                │
+                                          │                  │ │ metadata   │ │                │
+                                          └──────────────────┘ └───────────┘ └───────────────┘
 ```
 
-**Backend** — layered FastAPI app: `handlers/` (HTTP routes) → `services/` (Gemini integration, chart generation/orchestration, in-memory file storage) → `models/` (Pydantic schemas + dataset parsing) → `middleware/` + `utils/` (logging, request IDs, structured errors). All Gemini calls are fully async so concurrent requests don't block one another. See [`backend-python/README.md`](backend-python/README.md) for the full module-by-module breakdown and API reference.
+**Backend** — layered FastAPI app: `handlers/` (HTTP routes) → `services/` (Gemini integration, chart generation/orchestration, S3-backed file storage) → `models/` (Pydantic schemas, dataset parsing, and SQLAlchemy DB models) → `middleware/` + `utils/` (logging, request IDs, structured errors). Uploaded files are stored in S3 (MinIO locally); dataset metadata lives in Postgres — nothing is held in server memory between requests, so any backend instance can serve any request. All Gemini calls and DB/S3 access are fully async so concurrent requests don't block one another. See [`backend-python/README.md`](backend-python/README.md) for the full module-by-module breakdown and API reference.
 
 **Frontend** — React 18 + TypeScript, Material UI v5 for the component/design system, Recharts for chart rendering, `react-grid-layout` for the pinnable dashboard canvas, `react-router-dom` for routing, `axios` for API calls. State lives in a single reducer-based context (`AppContext`/`reducer.ts`) with chat threads (including pinned dashboards) persisted to `localStorage`.
 
@@ -64,6 +66,8 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 | Dashboard layout | `react-grid-layout` (drag/resize grid) |
 | Backend framework | FastAPI (Python 3.11) + Uvicorn |
 | Data processing | pandas, numpy |
+| Database | Postgres (+ `pgvector`) via SQLAlchemy 2.0 (async, `asyncpg`) + Alembic |
+| Object storage | S3-compatible (MinIO locally, AWS S3 in the cloud) via `aioboto3` |
 | AI / LLM | Google Vertex AI — Gemini (async `httpx` + `google-auth`) |
 | Validation | Pydantic v2 |
 
@@ -75,11 +79,14 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 Agenetic Data Analyzer/
 ├── backend-python/          # FastAPI backend — see its own README for full details
 │   ├── handlers/             # POST /upload, /suggestions, /contextual-suggestions, /analyze
-│   ├── services/               # gemini.py (LLM calls), analysis_engine.py (orchestration + chart data), file_storage.py
-│   ├── models/                   # Pydantic schemas + dataset parsing/statistics
-│   ├── middleware/                 # request ID + request logging
-│   ├── utils/                        # error hierarchy, response helpers, input validation
-│   └── main.py                        # app entrypoint
+│   ├── services/               # gemini.py, analysis_engine.py, storage_service.py (S3/MinIO),
+│   │                             # dataset_service.py, user_service.py
+│   ├── models/                   # Pydantic schemas + dataset parsing (models/), SQLAlchemy models (models/db/)
+│   ├── alembic/                    # DB migrations
+│   ├── middleware/                   # request ID + request logging
+│   ├── utils/                          # error hierarchy, response helpers, input validation
+│   ├── database.py                      # async engine/session
+│   └── main.py                           # app entrypoint
 │
 └── frontend/                # React + MUI frontend
     └── src/
@@ -100,31 +107,70 @@ Agenetic Data Analyzer/
 
 - Python 3.11 or 3.12
 - Node.js 18+ and npm
+- Docker (for local Postgres + MinIO)
 - A Google Cloud project with the **Vertex AI API** enabled
 
-### 1. Backend
+### 1. Local infrastructure (Postgres + MinIO)
+
+Uploaded files and dataset metadata are persisted in S3 and Postgres respectively — bring these up before the backend, since `/upload` needs both.
+
+```bash
+docker compose up -d
+```
+
+This starts:
+- **Postgres** (`pgvector/pgvector:pg16`) on `localhost:5433` (not the Postgres default 5432 — deliberately avoids clashing with a native Postgres install you may already have running) — connect with `psql`, TablePlus, DBeaver, or any Postgres GUI client using the credentials in `docker-compose.yml` / `backend-python/.env.example` (`DATABASE_URL`).
+- **MinIO** (S3-compatible object storage) — API on `localhost:9000`, web console on [`localhost:9001`](http://localhost:9001) (log in with the `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` values, defaults in `docker-compose.yml`).
+
+Create the local bucket (`orion-datasets-local`) — either once by hand via the MinIO console, or automatically on every startup:
+
+```bash
+cp docker-compose.override.yml.example docker-compose.override.yml
+docker compose up -d
+```
+
+Stop everything with `docker compose down` (add `-v` to also wipe the persisted volumes).
+
+### 2. Database schema (SQLAlchemy + Alembic)
+
+With Postgres running (previous step), apply the schema:
 
 ```bash
 cd backend-python
 python -m venv venv
-
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-
+venv\Scripts\activate                          # Windows
 pip install -r requirements.txt
+alembic upgrade head                            # applies all migrations
+```
+
+Other common commands, run from `backend-python/`:
+
+```bash
+alembic revision --autogenerate -m "describe your change"   # generate a new migration after editing models/db/*.py
+alembic upgrade head                                          # apply all pending migrations
+alembic downgrade -1                                           # revert the most recent migration
+alembic current                                                 # show the currently-applied revision
+```
+
+The schema lives in `models/db/` (`User`, `Dataset`, `ChatThread`, `Message`) — `Base.metadata` from there is what `alembic revision --autogenerate` diffs against.
+
+### 3. Backend
+
+```bash
+cd backend-python
+venv\Scripts\activate        # Windows — skip if already active from step 2
+# source venv/bin/activate   # macOS/Linux
 
 copy .env.example .env      # Windows
 # cp .env.example .env      # macOS/Linux
-# then edit .env — set GOOGLE_CLOUD_PROJECT_ID
+# then edit .env — set GOOGLE_CLOUD_PROJECT_ID (Postgres/S3 vars already default to the local infra above)
 
 gcloud auth application-default login
 
 python main.py               # listens on http://localhost:3001
 ```
 
-### 2. Frontend
+### 4. Frontend
 
 ```bash
 cd frontend
@@ -139,48 +185,6 @@ npm run dev                       # listens on http://localhost:5173
 Open `http://localhost:5173` in your browser.
 
 Full backend details (Docker, data flow, module-by-module breakdown) are in [`backend-python/README.md`](backend-python/README.md).
-
-### 3. Local infrastructure (Postgres + MinIO)
-
-Not required for the core upload/analyze flow yet — this brings up Postgres (with the `pgvector` extension, for RAG work) and a local S3-compatible store (MinIO), so the app talks to the same kind of endpoints locally as it will in the cloud, just pointed at `localhost` instead of AWS.
-
-```bash
-docker compose up -d
-```
-
-This starts:
-- **Postgres** (`pgvector/pgvector:pg16`) on `localhost:5433` (not the Postgres default 5432 — deliberately avoids clashing with a native Postgres install you may already have running) — connect with `psql`, TablePlus, DBeaver, or any Postgres GUI client using the credentials in `docker-compose.yml` / `backend-python/.env.example` (`DATABASE_URL`).
-- **MinIO** (S3-compatible object storage) — API on `localhost:9000`, web console on [`localhost:9001`](http://localhost:9001) (log in with the `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` values, defaults in `docker-compose.yml`).
-
-To auto-create the local bucket (`orion-datasets-local`) on startup:
-
-```bash
-cp docker-compose.override.yml.example docker-compose.override.yml
-docker compose up -d
-```
-
-Stop everything with `docker compose down` (add `-v` to also wipe the persisted volumes).
-
-### 4. Database schema (SQLAlchemy + Alembic)
-
-With Postgres running (previous step), apply the schema:
-
-```bash
-cd backend-python
-venv\Scripts\activate                          # Windows
-alembic upgrade head                            # applies all migrations
-```
-
-Other common commands, run from `backend-python/`:
-
-```bash
-alembic revision --autogenerate -m "describe your change"   # generate a new migration after editing models/db/*.py
-alembic upgrade head                                          # apply all pending migrations
-alembic downgrade -1                                           # revert the most recent migration
-alembic current                                                 # show the currently-applied revision
-```
-
-The schema lives in `models/db/` (`User`, `Dataset`, `ChatThread`, `Message`) — `Base.metadata` from there is what `alembic revision --autogenerate` diffs against.
 
 ---
 
