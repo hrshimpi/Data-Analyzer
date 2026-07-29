@@ -25,8 +25,9 @@ import DarkModeIcon from '@mui/icons-material/DarkMode'
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'
 import { useAppState } from '../context/AppContext'
 import { useColorMode } from '../context/ColorModeContext'
+import { deleteThread, getThreadMessages, renameThread } from '../api/backend'
 import type { AppAction } from '../context/reducer'
-import type { ChatThread } from '../types'
+import { normalizeError } from '../utils/errorMessage'
 
 const EXPANDED_WIDTH = 272
 const COLLAPSED_WIDTH = 68
@@ -37,38 +38,43 @@ export default function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false)
 
   const handleNewChat = () => {
-    const newThread: ChatThread = {
-      id: Date.now().toString(),
-      title: 'Untitled chat',
-      messages: [],
-      fileId: null,
-      schema: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+    dispatch({ type: 'CLEAR_ACTIVE_THREAD' } as AppAction)
+  }
+
+  const handleSelectThread = async (threadId: string) => {
+    if (threadId === state.activeThreadId) return
+    try {
+      const detail = await getThreadMessages(threadId)
+      dispatch({
+        type: 'SET_ACTIVE_THREAD_DATA',
+        payload: { threadId: detail.threadId, schema: detail.schema, messages: detail.messages },
+      } as AppAction)
+    } catch (err) {
+      console.error('Failed to load thread:', normalizeError(err, 'Failed to load chat.').message)
     }
-    dispatch({ type: 'CREATE_CHAT_THREAD', payload: newThread } as AppAction)
   }
 
-  const handleSelectThread = (threadId: string) => {
-    dispatch({ type: 'SET_ACTIVE_THREAD', payload: threadId } as AppAction)
-  }
-
-  const handleDeleteThread = (threadId: string, e: React.MouseEvent) => {
+  const handleDeleteThread = async (threadId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    dispatch({ type: 'DELETE_THREAD', payload: threadId } as AppAction)
+    try {
+      await deleteThread(threadId)
+      dispatch({ type: 'REMOVE_THREAD', payload: threadId } as AppAction)
+    } catch (err) {
+      console.error('Failed to delete thread:', normalizeError(err, 'Failed to delete chat.').message)
+    }
   }
 
-  const handleEditThread = (threadId: string, e: React.MouseEvent) => {
+  const handleEditThread = async (threadId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    const thread = state.chatThreads.find((t) => t.id === threadId)
-    if (thread) {
-      const newTitle = window.prompt('Rename chat', thread.title)
-      if (newTitle !== null && newTitle.trim() !== '') {
-        dispatch({
-          type: 'UPDATE_THREAD_TITLE',
-          payload: { threadId, title: newTitle.trim() },
-        } as AppAction)
-      }
+    const thread = state.threads.find((t) => t.id === threadId)
+    if (!thread) return
+    const newTitle = window.prompt('Rename chat', thread.title)
+    if (newTitle === null || newTitle.trim() === '') return
+    try {
+      const updated = await renameThread(threadId, newTitle.trim())
+      dispatch({ type: 'UPSERT_THREAD', payload: updated } as AppAction)
+    } catch (err) {
+      console.error('Failed to rename thread:', normalizeError(err, 'Failed to rename chat.').message)
     }
   }
 
@@ -155,50 +161,47 @@ export default function AppSidebar() {
       )}
 
       <List sx={{ overflowY: 'auto', flex: 1, px: collapsed ? 0.5 : 1, py: 0.5 }} dense>
-        {state.chatThreads.length === 0 && !collapsed && (
+        {state.threads.length === 0 && !collapsed && (
           <Typography variant="body2" sx={{ px: 1.5, py: 1, color: 'text.secondary' }}>
             No chats yet
           </Typography>
         )}
-        {state.chatThreads
-          .slice()
-          .reverse()
-          .map((thread) => (
-            <ListItem
-              key={thread.id}
-              disablePadding
-              secondaryAction={
-                !collapsed ? (
-                  <Stack direction="row" spacing={0.25} className="thread-hover-actions" sx={{ opacity: 0 }}>
-                    <IconButton edge="end" size="small" onClick={(e) => handleEditThread(thread.id, e)} aria-label="Rename chat">
-                      <EditOutlinedIcon sx={{ fontSize: 15 }} />
-                    </IconButton>
-                    <IconButton edge="end" size="small" onClick={(e) => handleDeleteThread(thread.id, e)} aria-label="Delete chat">
-                      <DeleteOutlineIcon sx={{ fontSize: 15 }} />
-                    </IconButton>
-                  </Stack>
-                ) : undefined
-              }
-              sx={{
-                mb: 0.5,
-                '&:hover .thread-hover-actions': { opacity: 1 },
-              }}
-            >
-              <Tooltip title={collapsed ? thread.title : ''} placement="right">
-                <ListItemButton
-                  selected={state.activeThreadId === thread.id}
-                  onClick={() => handleSelectThread(thread.id)}
-                  sx={{ borderRadius: 2, justifyContent: collapsed ? 'center' : 'flex-start', pr: collapsed ? 1 : 7 }}
-                >
-                  {collapsed ? (
-                    <ChatBubbleOutlineIcon fontSize="small" />
-                  ) : (
-                    <ListItemText primary={thread.title} primaryTypographyProps={{ noWrap: true, fontSize: 14 }} />
-                  )}
-                </ListItemButton>
-              </Tooltip>
-            </ListItem>
-          ))}
+        {state.threads.map((thread) => (
+          <ListItem
+            key={thread.id}
+            disablePadding
+            secondaryAction={
+              !collapsed ? (
+                <Stack direction="row" spacing={0.25} className="thread-hover-actions" sx={{ opacity: 0 }}>
+                  <IconButton edge="end" size="small" onClick={(e) => handleEditThread(thread.id, e)} aria-label="Rename chat">
+                    <EditOutlinedIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                  <IconButton edge="end" size="small" onClick={(e) => handleDeleteThread(thread.id, e)} aria-label="Delete chat">
+                    <DeleteOutlineIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Stack>
+              ) : undefined
+            }
+            sx={{
+              mb: 0.5,
+              '&:hover .thread-hover-actions': { opacity: 1 },
+            }}
+          >
+            <Tooltip title={collapsed ? thread.title : ''} placement="right">
+              <ListItemButton
+                selected={state.activeThreadId === thread.id}
+                onClick={() => handleSelectThread(thread.id)}
+                sx={{ borderRadius: 2, justifyContent: collapsed ? 'center' : 'flex-start', pr: collapsed ? 1 : 7 }}
+              >
+                {collapsed ? (
+                  <ChatBubbleOutlineIcon fontSize="small" />
+                ) : (
+                  <ListItemText primary={thread.title} primaryTypographyProps={{ noWrap: true, fontSize: 14 }} />
+                )}
+              </ListItemButton>
+            </Tooltip>
+          </ListItem>
+        ))}
       </List>
 
       <Divider />

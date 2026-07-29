@@ -1,10 +1,9 @@
 import { useRef, useState } from 'react'
 import { Alert, Box, LinearProgress, Paper, Stack, Typography } from '@mui/material'
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined'
-import { uploadFile } from '../api/backend'
+import { createThread, uploadFile } from '../api/backend'
 import { useAppState } from '../context/AppContext'
 import type { AppAction } from '../context/reducer'
-import type { ChatThread } from '../types'
 import { normalizeError } from '../utils/errorMessage'
 
 const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls']
@@ -52,33 +51,22 @@ export default function FileUpload() {
     setUploading(true)
     try {
       const schema = await uploadFile(file)
-      const schemaWithFileName = { ...schema, fileName: file.name }
-      const existingTitles = state.chatThreads.map((t) => t.title)
+      const existingTitles = state.threads.map((t) => t.title)
       const title = nextThreadTitle(file.name, existingTitles)
 
-      if (state.activeThreadId) {
-        dispatch({
-          type: 'UPDATE_THREAD_FILE',
-          payload: {
-            threadId: state.activeThreadId,
-            fileId: schemaWithFileName.fileId,
-            schema: schemaWithFileName,
-            title,
-          },
-        } as AppAction)
-      } else {
-        const newThread: ChatThread = {
-          id: Date.now().toString(),
-          title,
-          messages: [],
-          fileId: schemaWithFileName.fileId,
-          schema: schemaWithFileName,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        }
-        dispatch({ type: 'SET_SCHEMA', payload: schemaWithFileName } as AppAction)
-        dispatch({ type: 'CREATE_CHAT_THREAD', payload: newThread } as AppAction)
-      }
+      // Create the backend thread right away (rather than waiting for the
+      // user's first question) so it shows up in the sidebar immediately,
+      // matching the previous local-only behavior.
+      const detail = await createThread(schema.fileId, title)
+
+      dispatch({
+        type: 'UPSERT_THREAD',
+        payload: { id: detail.threadId, title: detail.title, datasetId: schema.fileId, updatedAt: new Date().toISOString() },
+      } as AppAction)
+      dispatch({
+        type: 'SET_ACTIVE_THREAD_DATA',
+        payload: { threadId: detail.threadId, schema: detail.schema, messages: detail.messages },
+      } as AppAction)
     } catch (err) {
       setError(normalizeError(err, 'Failed to upload file. Please try again.').message)
     } finally {

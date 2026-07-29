@@ -6,7 +6,12 @@ from typing import Any
 
 def success(data: BaseModel | dict[str, Any], status_code: int = 200) -> JSONResponse:
     if isinstance(data, BaseModel):
-        body = data.model_dump(by_alias=True)
+        # mode="json" converts non-JSON-native types (datetime, UUID, ...)
+        # to their JSON-safe representation. Plain model_dump() leaves them
+        # as Python objects, which JSONResponse's encoder can't serialize —
+        # latent until ThreadSummary/MessageOut, the first response models
+        # with a datetime field.
+        body = data.model_dump(mode="json", by_alias=True)
     else:
         body = data
     return JSONResponse(content=body, status_code=status_code)

@@ -64,15 +64,25 @@ export interface PinnedChart {
   layout: DashboardLayout
 }
 
-export interface ChatThread {
+/** Lightweight thread list entry — from GET /threads. No message data;
+ * fetch that separately (GET /threads/{id}/messages) only for the thread
+ * currently being viewed. */
+export interface ThreadSummary {
   id: string
   title: string
+  datasetId: string
+  updatedAt: string
+}
+
+/** Everything needed to open a thread in one call: its dataset's schema
+ * plus its full message history. Returned by both GET /threads/{id}/messages
+ * and POST /threads (a freshly created thread is just one with zero
+ * messages). */
+export interface ThreadDetail {
+  threadId: string
+  title: string
+  schema: DatasetSchema
   messages: ChatMessage[]
-  fileId?: string | null
-  schema?: DatasetSchema | null
-  pinnedCharts?: PinnedChart[]
-  createdAt: number
-  updatedAt: number
 }
 
 export interface AppState {
@@ -80,9 +90,12 @@ export interface AppState {
   schema: DatasetSchema | null
   suggestions: string[]
   chats: ChatMessage[]
-  charts: ChartConfig[]
-  chatThreads: ChatThread[]
+  threads: ThreadSummary[]
   activeThreadId: string | null
+  // Pinned dashboard charts have no backend support yet (out of scope for
+  // thread/message persistence) — kept in a small, separately-persisted
+  // local store, keyed by thread id, isolated from the API-backed state.
+  pinnedChartsByThread: Record<string, PinnedChart[]>
 }
 
 export interface SuggestionsResponse {
@@ -95,5 +108,6 @@ export interface AnalyzeResponse {
   chartStatus?: 'success' | 'partial' | 'failed' | 'not_feasible'
   chartMessage?: string
   retryAttempts?: number
+  threadId: string
+  title: string
 }
-

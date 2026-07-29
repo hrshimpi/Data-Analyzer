@@ -14,9 +14,7 @@ const CHART_STATUS_SEVERITY: Record<string, 'warning' | 'error' | 'info'> = {
 
 export default function ChatHistory() {
   const { state } = useAppState()
-
-  const activeThread = state.activeThreadId ? state.chatThreads.find((t) => t.id === state.activeThreadId) : null
-  const messages = activeThread?.messages || state.chats
+  const messages = state.chats
 
   if (messages.length === 0) {
     return (

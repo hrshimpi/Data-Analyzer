@@ -11,8 +11,8 @@ const ResponsiveGridLayout = WidthProvider(Responsive)
 
 export default function DashboardCanvas() {
   const { state, dispatch } = useAppState()
-  const activeThread = state.activeThreadId ? state.chatThreads.find((t) => t.id === state.activeThreadId) : null
-  const pinnedCharts = activeThread?.pinnedCharts ?? []
+  const activeThreadId = state.activeThreadId
+  const pinnedCharts = activeThreadId ? state.pinnedChartsByThread[activeThreadId] ?? [] : []
 
   if (pinnedCharts.length === 0) {
     return (
@@ -34,19 +34,19 @@ export default function DashboardCanvas() {
   const layout = pinnedCharts.map((p) => ({ i: p.id, x: p.layout.x, y: p.layout.y, w: p.layout.w, h: p.layout.h, minW: 3, minH: 4 }))
 
   const handleLayoutChange = (newLayout: Array<{ i: string; x: number; y: number; w: number; h: number }>) => {
-    if (!activeThread) return
+    if (!activeThreadId) return
     dispatch({
       type: 'UPDATE_DASHBOARD_LAYOUT',
       payload: {
-        threadId: activeThread.id,
+        threadId: activeThreadId,
         layouts: newLayout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h })),
       },
     } as AppAction)
   }
 
   const handleRemove = (chartId: string) => {
-    if (!activeThread) return
-    dispatch({ type: 'UNPIN_CHART', payload: { threadId: activeThread.id, chartId } } as AppAction)
+    if (!activeThreadId) return
+    dispatch({ type: 'UNPIN_CHART', payload: { threadId: activeThreadId, chartId } } as AppAction)
   }
 
   return (
