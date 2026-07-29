@@ -37,12 +37,7 @@ export default function PromptInput() {
       content: prompt,
       timestamp: Date.now(),
     }
-
-    if (state.activeThreadId) {
-      dispatch({ type: 'UPDATE_THREAD', payload: { threadId: state.activeThreadId, message: userMessage } } as AppAction)
-    } else {
-      dispatch({ type: 'ADD_CHAT', payload: userMessage } as AppAction)
-    }
+    dispatch({ type: 'ADD_MESSAGE', payload: userMessage } as AppAction)
 
     setLoading(true)
     setError(null)
@@ -51,7 +46,7 @@ export default function PromptInput() {
     setPrompt('')
 
     try {
-      const response = await analyze(state.fileId, currentPrompt)
+      const response = await analyze(state.fileId, currentPrompt, state.activeThreadId)
 
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -63,12 +58,21 @@ export default function PromptInput() {
         retryAttempts: response.retryAttempts,
         timestamp: Date.now(),
       }
+      dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage } as AppAction)
 
-      if (state.activeThreadId) {
-        dispatch({ type: 'UPDATE_THREAD', payload: { threadId: state.activeThreadId, message: assistantMessage } } as AppAction)
-      } else {
-        dispatch({ type: 'ADD_CHAT', payload: assistantMessage } as AppAction)
-      }
+      // The backend may have just auto-created the thread (first question
+      // in a session) or renamed it (first message in an existing thread) —
+      // either way, keep the sidebar list in sync with what actually
+      // happened server-side rather than assuming.
+      dispatch({
+        type: 'UPSERT_THREAD',
+        payload: {
+          id: response.threadId,
+          title: response.title,
+          datasetId: state.fileId,
+          updatedAt: new Date().toISOString(),
+        },
+      } as AppAction)
     } catch (err) {
       const normalized = normalizeError(err, 'Failed to analyze your request. Please try again.')
       setError(normalized.message)
@@ -80,11 +84,7 @@ export default function PromptInput() {
         content: `I ran into a problem: ${normalized.message}${normalized.requestId ? ` (Request ID: ${normalized.requestId})` : ''}`,
         timestamp: Date.now(),
       }
-      if (state.activeThreadId) {
-        dispatch({ type: 'UPDATE_THREAD', payload: { threadId: state.activeThreadId, message: errorChatMessage } } as AppAction)
-      } else {
-        dispatch({ type: 'ADD_CHAT', payload: errorChatMessage } as AppAction)
-      }
+      dispatch({ type: 'ADD_MESSAGE', payload: errorChatMessage } as AppAction)
     } finally {
       setLoading(false)
     }

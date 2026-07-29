@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosResponse } from 'axios'
-import type { DatasetSchema, SuggestionsResponse, AnalyzeResponse } from '../types'
+import type { ChatMessage, ColumnInfo, DatasetSchema, SuggestionsResponse, SummaryStats, AnalyzeResponse, ThreadDetail, ThreadSummary } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
@@ -117,13 +117,14 @@ export const getSuggestions = async (
 
 export const analyze = async (
   fileId: string,
-  prompt: string
+  prompt: string,
+  threadId?: string | null
 ): Promise<AnalyzeResponse> => {
   // /analyze can chain up to 4 sequential Gemini calls (insights + up to 3
   // chart-generation retries), which can exceed the default 60s timeout.
   const response = await api.post<AnalyzeResponse>(
     '/analyze',
-    { fileId, prompt },
+    { fileId, prompt, threadId: threadId ?? undefined },
     { timeout: 150000 }
   )
 
@@ -140,5 +141,83 @@ export const getContextualSuggestions = async (
   })
 
   return response.data.suggestions
+}
+
+// ---------------------------------------------------------------------------
+// Chat threads
+// ---------------------------------------------------------------------------
+
+interface RawMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  chartConfigs?: {
+    charts?: ChatMessage['charts']
+    chartStatus?: ChatMessage['chartStatus']
+    chartMessage?: string
+    retryAttempts?: number
+  } | null
+  createdAt: string
+}
+
+interface RawThreadDetail {
+  threadId: string
+  title: string
+  datasetId: string
+  fileName: string
+  columns: ColumnInfo[]
+  summary: Record<string, SummaryStats>
+  messages: RawMessage[]
+}
+
+function mapMessage(raw: RawMessage): ChatMessage {
+  return {
+    id: raw.id,
+    role: raw.role,
+    content: raw.content,
+    timestamp: new Date(raw.createdAt).getTime(),
+    charts: raw.chartConfigs?.charts,
+    chartStatus: raw.chartConfigs?.chartStatus,
+    chartMessage: raw.chartConfigs?.chartMessage,
+    retryAttempts: raw.chartConfigs?.retryAttempts,
+  }
+}
+
+function mapThreadDetail(raw: RawThreadDetail): ThreadDetail {
+  return {
+    threadId: raw.threadId,
+    title: raw.title,
+    schema: {
+      fileId: raw.datasetId,
+      fileName: raw.fileName,
+      columns: raw.columns,
+      summary: raw.summary,
+    },
+    messages: raw.messages.map(mapMessage),
+  }
+}
+
+export const listThreads = async (): Promise<ThreadSummary[]> => {
+  const response = await api.get<{ threads: ThreadSummary[] }>('/threads')
+  return response.data.threads
+}
+
+export const getThreadMessages = async (threadId: string): Promise<ThreadDetail> => {
+  const response = await api.get<RawThreadDetail>(`/threads/${threadId}/messages`)
+  return mapThreadDetail(response.data)
+}
+
+export const createThread = async (datasetId: string, title?: string): Promise<ThreadDetail> => {
+  const response = await api.post<RawThreadDetail>('/threads', { datasetId, title })
+  return mapThreadDetail(response.data)
+}
+
+export const renameThread = async (threadId: string, title: string): Promise<ThreadSummary> => {
+  const response = await api.patch<ThreadSummary>(`/threads/${threadId}`, { title })
+  return response.data
+}
+
+export const deleteThread = async (threadId: string): Promise<void> => {
+  await api.delete(`/threads/${threadId}`)
 }
 

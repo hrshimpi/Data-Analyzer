@@ -16,8 +16,7 @@ export default function ChatScreen() {
   const hasMessages = state.chats.length > 0
   const [view, setView] = useState<View>('chat')
 
-  const activeThread = state.activeThreadId ? state.chatThreads.find((t) => t.id === state.activeThreadId) : null
-  const pinnedCount = activeThread?.pinnedCharts?.length ?? 0
+  const pinnedCount = state.activeThreadId ? state.pinnedChartsByThread[state.activeThreadId]?.length ?? 0 : 0
 
   return (
     <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

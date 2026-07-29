@@ -17,7 +17,7 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
    - asks Gemini to propose 1–3 chart configurations that best visualize the answer,
    - validates every chart config against the actual dataset (rejecting hallucinated column names or type mismatches), retrying up to 3 times if needed,
    - computes the real chart data server-side (sampling, binning, correlation matrices, box-plot quartiles, etc.) and returns it alongside the written insight.
-4. **Keep asking** — follow-up questions get contextual suggestions based on the conversation so far, and everything is organized into chat threads (multiple files/conversations, switchable from the sidebar, persisted in `localStorage`).
+4. **Keep asking** — follow-up questions get contextual suggestions based on the conversation so far, and everything is organized into chat threads (multiple files/conversations, switchable from the sidebar). Threads and messages are persisted server-side in Postgres, tied to your authenticated account — not to a single browser.
 
 ## Features
 
@@ -27,7 +27,7 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 - 📈 Interactive charts (bar, line, scatter, pie, area, combo, histogram, boxplot, bubble, correlation)
 - 📌 **Pinnable dashboard canvas** — pin any generated chart out of the chat onto a persistent, drag-and-resize grid (built on `react-grid-layout`), so you can assemble your own dashboard instead of scrolling back through the conversation
 - 🌓 Light/dark theme
-- 💾 Local browser persistence — multiple chat threads and pinned dashboards, switchable from the sidebar
+- ☁️ Server-side persistence — chat threads and messages are stored in Postgres against your account, so the same conversations show up on any device/browser you log into; pinned dashboards currently remain per-browser (`localStorage`)
 
 ---
 
@@ -52,7 +52,7 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 
 **Backend** — layered FastAPI app: `handlers/` (HTTP routes) → `services/` (Gemini integration, chart generation/orchestration, S3-backed file storage) → `models/` (Pydantic schemas, dataset parsing, and SQLAlchemy DB models) → `middleware/` + `utils/` (logging, request IDs, structured errors). Uploaded files are stored in S3 (MinIO locally); dataset metadata lives in Postgres — nothing is held in server memory between requests, so any backend instance can serve any request. All Gemini calls and DB/S3 access are fully async so concurrent requests don't block one another. See [`backend-python/README.md`](backend-python/README.md) for the full module-by-module breakdown and API reference.
 
-**Frontend** — React 18 + TypeScript, Material UI v5 for the component/design system, Recharts for chart rendering, `react-grid-layout` for the pinnable dashboard canvas, `react-router-dom` for routing, `axios` for API calls. State lives in a single reducer-based context (`AppContext`/`reducer.ts`) with chat threads (including pinned dashboards) persisted to `localStorage`.
+**Frontend** — React 18 + TypeScript, Material UI v5 for the component/design system, Recharts for chart rendering, `react-grid-layout` for the pinnable dashboard canvas, `react-router-dom` for routing, `axios` for API calls. State lives in a single reducer-based context (`AppContext`/`reducer.ts`); the thread list and each thread's messages are fetched from the backend on demand rather than cached client-side. Pinned dashboards are the one piece of state still kept in `localStorage`, keyed per thread.
 
 ---
 
@@ -79,9 +79,9 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 ```
 Agenetic Data Analyzer/
 ├── backend-python/          # FastAPI backend — see its own README for full details
-│   ├── handlers/             # POST /upload, /suggestions, /contextual-suggestions, /analyze
+│   ├── handlers/             # POST /upload, /suggestions, /contextual-suggestions, /analyze, threads.py
 │   ├── services/               # gemini.py, analysis_engine.py, storage_service.py (S3/MinIO),
-│   │                             # dataset_service.py, user_service.py
+│   │                             # dataset_service.py, thread_service.py, auth_service.py
 │   ├── models/                   # Pydantic schemas + dataset parsing (models/), SQLAlchemy models (models/db/)
 │   ├── alembic/                    # DB migrations
 │   ├── middleware/                   # request ID + request logging
@@ -245,7 +245,12 @@ The frontend sends this same hardcoded token on every request (`VITE_DEV_AUTH_TO
 | `POST` | `/upload` | Upload a CSV/Excel file, get back `fileId` + column schema + statistics |
 | `POST` | `/suggestions` | Get initial AI-generated analysis suggestions for a dataset |
 | `POST` | `/contextual-suggestions` | Get follow-up question suggestions based on chat history |
-| `POST` | `/analyze` | Ask a question; get back written insights + validated chart configs with data |
+| `POST` | `/analyze` | Ask a question (optionally within an existing `threadId`); get back written insights + validated chart configs with data |
+| `GET` | `/threads` | List the authenticated user's chat threads, most recently updated first |
+| `GET` | `/threads/{id}/messages` | Get a thread's dataset schema + full message history |
+| `POST` | `/threads` | Create a new (empty) thread for a dataset |
+| `PATCH` | `/threads/{id}` | Rename a thread |
+| `DELETE` | `/threads/{id}` | Delete a thread and its messages |
 | `GET` | `/health` | Health check |
 
 Interactive Swagger docs are available at `http://localhost:3001/docs` while the backend is running.
