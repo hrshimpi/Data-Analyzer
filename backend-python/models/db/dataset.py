@@ -11,6 +11,7 @@ from .base import Base, UUIDPKMixin
 
 if TYPE_CHECKING:
     from .chat_thread import ChatThread
+    from .document import Document
     from .user import User
 
 
@@ -41,6 +42,7 @@ class Dataset(UUIDPKMixin, Base):
 
     user: Mapped["User"] = relationship(back_populates="datasets")
     chat_threads: Mapped[list["ChatThread"]] = relationship(back_populates="dataset", cascade="all, delete-orphan")
+    documents: Mapped[list["Document"]] = relationship(back_populates="dataset", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"Dataset(id={self.id!r}, filename={self.filename!r})"
