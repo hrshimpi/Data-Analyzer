@@ -51,7 +51,10 @@ class DocumentChunk(UUIDPKMixin, Base):
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    # Nullable: ingestion (chunking) and embedding are deliberately separate
+    # steps (this prompt inserts chunks with embedding=NULL; a later prompt
+    # fills it in), so a chunk can legitimately exist without one yet.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

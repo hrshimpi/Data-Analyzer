@@ -55,6 +55,20 @@ async def upload_file(user_id: str, dataset_id: str, filename: str, file_bytes: 
     return key
 
 
+def build_document_key(user_id: str, document_id: str, filename: str) -> str:
+    """{user_id}/documents/{document_id}/{filename} — same bucket as
+    datasets, different key prefix, so a document can never collide with
+    (or be confused for) a dataset file even if the two IDs coincided."""
+    return f"{user_id}/documents/{document_id}/{filename}"
+
+
+async def upload_document(user_id: str, document_id: str, filename: str, file_bytes: bytes) -> str:
+    key = build_document_key(user_id, document_id, filename)
+    async with _session.client("s3", **_client_kwargs()) as s3:
+        await s3.put_object(Bucket=bucket_name(), Key=key, Body=file_bytes)
+    return key
+
+
 async def get_file(s3_key: str) -> bytes:
     async with _session.client("s3", **_client_kwargs()) as s3:
         response = await s3.get_object(Bucket=bucket_name(), Key=s3_key)

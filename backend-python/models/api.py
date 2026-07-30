@@ -150,3 +150,42 @@ class CreateThreadRequest(BaseModel):
 
 class RenameThreadRequest(BaseModel):
     title: str
+
+
+# ---------------------------------------------------------------------------
+# Documents (RAG ingestion)
+# ---------------------------------------------------------------------------
+
+class DocumentResponse(BaseModel):
+    id: str
+    filename: str
+    doc_type: str = Field(alias="docType")
+    status: str
+    dataset_id: Optional[str] = Field(None, alias="datasetId")
+    uploaded_at: datetime = Field(alias="uploadedAt")
+
+    model_config = {"populate_by_name": True}
+
+
+class DocumentSummary(BaseModel):
+    id: str
+    filename: str
+    doc_type: str = Field(alias="docType")
+    status: str
+    dataset_id: Optional[str] = Field(None, alias="datasetId")
+    uploaded_at: datetime = Field(alias="uploadedAt")
+    chunk_count: int = Field(alias="chunkCount")
+
+    model_config = {"populate_by_name": True}
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentSummary]
+
+
+class DocumentStatusResponse(BaseModel):
+    id: str
+    status: str
+    chunk_count: int = Field(alias="chunkCount")
+
+    model_config = {"populate_by_name": True}

@@ -38,3 +38,16 @@ def validate_upload(filename: str, size: int) -> str | None:
     if ext not in _ALLOWED_EXTENSIONS:
         return f"Only CSV and Excel files are accepted. Got: {ext or 'unknown'}"
     return None
+
+
+_DOCUMENT_ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md"}
+_MAX_DOCUMENT_SIZE = 20 * 1024 * 1024  # 20 MB — more generous than dataset uploads; PDFs run larger than CSVs
+
+
+def validate_document_upload(filename: str, size: int) -> str | None:
+    if size > _MAX_DOCUMENT_SIZE:
+        return "File size must not exceed 20 MB."
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in _DOCUMENT_ALLOWED_EXTENSIONS:
+        return f"Only PDF, TXT, and Markdown files are accepted. Got: {ext or 'unknown'}"
+    return None
