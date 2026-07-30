@@ -79,9 +79,10 @@ Built with **FastAPI (Python)** on the backend and **React + TypeScript + Materi
 ```
 Agenetic Data Analyzer/
 ├── backend-python/          # FastAPI backend — see its own README for full details
-│   ├── handlers/             # POST /upload, /suggestions, /contextual-suggestions, /analyze, threads.py
+│   ├── handlers/             # POST /upload, /suggestions, /contextual-suggestions, /analyze, threads.py, documents.py
 │   ├── services/               # gemini.py, analysis_engine.py, storage_service.py (S3/MinIO),
-│   │                             # dataset_service.py, thread_service.py, auth_service.py
+│   │                             # dataset_service.py, thread_service.py, auth_service.py,
+│   │                             # document_service.py, chunking_service.py (RAG ingestion)
 │   ├── models/                   # Pydantic schemas + dataset parsing (models/), SQLAlchemy models (models/db/)
 │   ├── alembic/                    # DB migrations
 │   ├── middleware/                   # request ID + request logging
@@ -251,6 +252,9 @@ The frontend sends this same hardcoded token on every request (`VITE_DEV_AUTH_TO
 | `POST` | `/threads` | Create a new (empty) thread for a dataset |
 | `PATCH` | `/threads/{id}` | Rename a thread |
 | `DELETE` | `/threads/{id}` | Delete a thread and its messages |
+| `POST` | `/documents` | Upload a PDF/TXT/Markdown file for RAG ingestion (optionally scoped to a `datasetId`); chunking runs as a background task |
+| `GET` | `/documents` | List the user's uploaded documents with status and chunk count |
+| `GET` | `/documents/{id}/status` | Poll a document's ingestion status (`pending` → `ready`/`failed`) |
 | `GET` | `/health` | Health check |
 
 Interactive Swagger docs are available at `http://localhost:3001/docs` while the backend is running.

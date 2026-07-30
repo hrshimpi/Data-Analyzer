@@ -16,6 +16,7 @@ from handlers.suggestions import router as suggestions_router
 from handlers.contextual_suggestions import router as contextual_suggestions_router
 from handlers.analyze import router as analyze_router
 from handlers.threads import router as threads_router
+from handlers.documents import router as documents_router
 from middleware.logger import LoggerMiddleware
 from middleware.request_id import RequestIDMiddleware
 
@@ -66,6 +67,7 @@ app.include_router(suggestions_router)
 app.include_router(contextual_suggestions_router)
 app.include_router(analyze_router)
 app.include_router(threads_router)
+app.include_router(documents_router)
 
 
 @app.get("/health")
