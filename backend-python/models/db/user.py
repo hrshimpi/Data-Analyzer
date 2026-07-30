@@ -10,6 +10,7 @@ from .base import Base, UUIDPKMixin
 if TYPE_CHECKING:
     from .chat_thread import ChatThread
     from .dataset import Dataset
+    from .document import Document
 
 
 class User(UUIDPKMixin, Base):
@@ -23,6 +24,7 @@ class User(UUIDPKMixin, Base):
 
     datasets: Mapped[list["Dataset"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     chat_threads: Mapped[list["ChatThread"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    documents: Mapped[list["Document"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, cognito_sub={self.cognito_sub!r})"
